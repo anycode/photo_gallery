@@ -645,7 +645,7 @@ class PhotoGalleryPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             val videoCursor = getVideoCursor(albumId, newest, projection, null, 1)
 
             videoCursor?.use { cursor ->
-                if (cursor.moveToNext()) {
+                if (cursor.moveToFirst()) {
                     val idColumn = cursor.getColumnIndex(MediaStore.Video.Media._ID)
                     val id = cursor.getLong(idColumn)
                     return@run getVideoThumbnail(id.toString(), width, height, highQuality)
@@ -857,34 +857,23 @@ class PhotoGalleryPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
 
     private fun getImageFile(mediumId: String, mimeType: String? = null): String? {
         return this.context.run {
-            mimeType?.let {
-                val type = this.contentResolver.getType(
-                    ContentUris.withAppendedId(
-                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                        mediumId.toLong()
-                    )
-                )
-                if (it != type) {
-                    return@run cacheImage(mediumId, it)
-                }
+            val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediumId.toLong())
+            val file = File(getCachePath(), "$mediumId.jpg")
+            if (file.exists()) {
+                return@run file.absolutePath
             }
 
-            val imageCursor = this.contentResolver.query(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Images.Media.DATA),
-                "${MediaStore.Images.Media._ID} = ?",
-                arrayOf(mediumId),
-                null
-            )
-
-            imageCursor?.use { cursor ->
-                if (cursor.moveToNext()) {
-                    val dataColumn = cursor.getColumnIndex(MediaStore.Images.Media.DATA)
-                    return@run cursor.getString(dataColumn)
+            try {
+                this.contentResolver.openInputStream(contentUri)?.use { inputStream ->
+                    FileOutputStream(file).use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
                 }
+                return@run file.absolutePath
+            } catch (e: Exception) {
+                e.printStackTrace()
+                return@run null
             }
-
-            return@run null
         }
     }
 
